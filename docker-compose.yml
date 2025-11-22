@@ -1,0 +1,82 @@
+services:
+  app:
+    image: docker.getoutline.com/outlinewiki/outline:latest
+    networks:
+      proxy_apps:
+      default:
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - URL
+      - PORT=3000
+      - WEB_CONCURRENCY=1
+      - SECRET_KEY
+      - UTILS_SECRET
+      - DEFAULT_LANGUAGE=de_DE
+      - PGSSLMODE=disable
+      - REDIS_URL=redis://cache:6379
+      - FILE_STORAGE=local
+      - FILE_STORAGE_LOCAL_ROOT_DIR=/var/lib/outline/data
+      - FILE_STORAGE_UPLOAD_MAX_SIZE=262144000
+      - FORCE_HTTPS=true
+      - OIDC_ISSUER_URL
+      - OIDC_CLIENT_ID
+      - OIDC_CLIENT_SECRET
+      - OIDC_USERNAME_CLAIM=preferred_username
+      - OIDC_DISPLAY_NAME=OpenID Connect
+      - OIDC_SCOPES=openid profile email
+      - RATE_LIMITER_ENABLED=true
+      - RATE_LIMITER_REQUESTS=1000
+      - RATE_LIMITER_DURATION_WINDOW=60
+      - ENABLE_UPDATES=false
+      - LOG_LEVEL=warn
+      - DATABASE_URL=postgres://outline:outline@db:5432/outline
+    volumes:
+      - app_data:/var/lib/outline/data
+    depends_on:
+      - db
+      - cache
+
+  cache:
+    image: redis:alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "[ $$(redis-cli ping) = 'PONG' ]"]
+      interval: 1m
+      timeout: 10s
+      start_period: 10s
+      retries: 6
+    networks:
+      default:
+
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    networks:
+      default:
+    environment:
+      POSTGRES_USER: outline
+      POSTGRES_PASSWORD: outline
+      POSTGRES_DB: outline
+    volumes:
+      - db_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      interval: 1m
+      timeout: 10s
+      start_period: 10s
+      retries: 6
+    labels:
+      - ofelia.restart=true
+      - ofelia.enabled=true
+      - "ofelia.job-exec.${COMPOSE_PROJECT_NAME}dbbackup.schedule=0 0 1 * * *"
+      - "ofelia.job-exec.${COMPOSE_PROJECT_NAME}dbbackup.command=sh -c 'pg_dumpall -U outline -f /var/lib/postgresql/data/backup.sql'"
+
+volumes:
+  app_data:
+  db_data:
+
+networks:
+  proxy_apps:
+    name: proxy_apps
+    external: true
