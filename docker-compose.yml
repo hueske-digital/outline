@@ -50,7 +50,7 @@ services:
       default:
 
   db:
-    image: postgres:18
+    image: postgres:18-alpine
     restart: unless-stopped
     networks:
       default:
